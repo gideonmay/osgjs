@@ -490,7 +490,7 @@ define( [
             // Update Manipulator/Event
             if ( this.getManipulator() ) {
                 this.getManipulator().update( this._updateVisitor );
-                Matrix.copy( this.getManipulator().getInverseMatrix(), this.getCamera().getViewMatrix() );
+                Matrix.copy( this.getManipulator().getInverseMatrix(), this.getManipulator().getCamera().getViewMatrix() );
             }
 
             if ( this.checkNeedToDoFrame() || canvasSizeChanged ) {

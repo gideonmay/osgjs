@@ -304,7 +304,7 @@ var generateVersionFile = function () {
         server: {
             options: {
                 port: 9001,
-                hostname: '127.0.0.1'
+                hostname: '0.0.0.0'
             }
         },
         dist: {

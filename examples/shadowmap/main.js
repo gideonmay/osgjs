@@ -1,9 +1,18 @@
 ( function () {
     'use strict';
+
+    window.OSG.globalify();
+
+    var $ = window.$;
+    var Q = window.Q;
+
     var OSG = window.OSG;
+
     var osg = OSG.osg;
     var osgDB = OSG.osgDB;
+    var osgGA = OSG.osgGA;
     var osgViewer = OSG.osgViewer;
+    var osgShader = OSG.osgShader;
     var osgUtil = OSG.osgUtil;
     var osgShadow = OSG.osgShadow;
 
@@ -25,7 +34,7 @@
             'epsilonVSM': 0.0008,
             'superSample': 0,
             'blur': false,
-            'blurKernelSize': 4.0,
+            'blurKernelSize': 8.0,
             'blurTextureSize': 256,
             'model': 'material-test',
             'shadowProjection': 'fov',
@@ -184,6 +193,10 @@
     };
     LightUpdateCallback.prototype = {
         update: function ( node, nv ) {
+
+            osg.Matrix.copy( this._example.camera.getViewMatrix(), this._example.cameraDepth.getViewMatrix() );
+            osg.Matrix.copy( this._example.camera.getProjectionMatrix(), this._example.cameraDepth.getProjectionMatrix() );
+
             var currentTime = nv.getFrameStamp().getSimulationTime();
             //
             var lightPos = this._lightPos;
@@ -385,6 +398,9 @@
 
             // controller = gui.add( this._config, 'logCamLight' );
 
+            controller = gui.add( this._config, 'blurKernelSize' ).min( 3.0 ).max( 128.0 );
+            controller.onChange( this.updateBlur.bind( this ) );
+
 
             var pcfFolder = gui.addFolder( 'PCF' );
             controller = pcfFolder.add( this._config, 'kernelSizePCF', osgShadow.ShadowSettings.kernelSizeList );
@@ -407,9 +423,6 @@
                     controller.onChange( this.updateShadow.bind( this ) );
 
                     controller = folderVSM.add( this._config, 'blur' );
-                    controller.onChange( this.updateShadow.bind( this ) );
-
-                    controller = folderVSM.add( this._config, 'blurKernelSize' ).min( 3.0 ).max( 128.0 );
                     controller.onChange( this.updateShadow.bind( this ) );
 
                     controller = folderVSM.add( this._config, 'blurTextureSize', [ 32, 64, 128, 256, 512, 1024, 2048, 4096, 8144 ] );
@@ -781,6 +794,11 @@
             this._previousRTT = this._config[ 'debugRTT' ];
             this._updateRTT = false;
         },
+        updateBlur: function () {
+            var krnSize = ~~this._config[ 'blurKernelSize' ];
+            this.vBlur.setBlurSize( krnSize );
+            this.hBlur.setBlurSize( krnSize );
+        },
         /*
          * try to minimize update cost and code size
          * with a single callback for all ui user changes
@@ -902,7 +920,7 @@
 
                     quad.setName( 'debugCompoQuadGeom' );
 
-                    stateset.setTextureAttributeAndModes( 0, texture );
+                    //                    stateset.setTextureAttributeAndModes( 0, texture );
                     stateset.setAttributeAndModes( this._programRTT );
                     // stateset.setAttributeAndModes(new osg.Depth('DISABLE'));
 
@@ -975,6 +993,8 @@
                         modelSubNode.addChild( modelSubNodeTrans );
                         modelNode.addChild( modelSubNode );
                     }
+
+                    this._viewer.getManipulator().computeHomePosition();
                 }.bind( this ) );
             }
             // make "pillars"
@@ -1036,7 +1056,7 @@
                 var cubeTex = osg.Texture.createFromImage( cubeImage );
                 cubeTex.setWrapT( 'MIRRORED_REPEAT' );
                 cubeTex.setWrapS( 'MIRRORED_REPEAT' );
-                cubeNode.getOrCreateStateSet().setTextureAttributeAndModes( 0, cubeTex );
+                //                cubeNode.getOrCreateStateSet().setTextureAttributeAndModes( 0, cubeTex );
 
             } );
 
@@ -1052,7 +1072,7 @@
                 var groundTex = osg.Texture.createFromImage( groundImage );
                 groundTex.setWrapT( 'MIRRORED_REPEAT' );
                 groundTex.setWrapS( 'MIRRORED_REPEAT' );
-                ground.getOrCreateStateSet().setTextureAttributeAndModes( 0, groundTex );
+                //                ground.getOrCreateStateSet().setTextureAttributeAndModes( 0, groundTex );
                 ground.getOrCreateStateSet().setAttributeAndModes( new osg.CullFace( osg.CullFace.DISABLE ), osg.StateAttribute.ON | osg.StateAttribute.OVERRIDE );
 
                 //ground.getOrCreateStateSet().setAttributeAndModes( new osg.BlendFunc( osg.BlendFunc.ONE, osg.BlendFunc.ONE_MINUS_SRC_ALPHA ) );
@@ -1173,7 +1193,8 @@
             ///////////////////////////////
 
             this._shadowSettings.push( shadowSettings );
-            var shadowMap = new osgShadow.ShadowMap( shadowSettings );
+            var shadowMap = new osgShadow.ScreenShadowMap( shadowSettings );
+            //var shadowMap = new osgShadow.ShadowMap( shadowSettings );
             this._lightAndShadowScene.addShadowTechnique( shadowMap );
             shadowMap.setShadowSettings( shadowSettings );
             this._shadowTechnique.push( shadowMap );
@@ -1248,6 +1269,60 @@
             return group;
         },
 
+        readShaders: function () {
+            var defer = Q.defer();
+            this._shaderProcessor = new osgShader.ShaderProcessor();
+
+            var shaders = [
+                '../../sources/osgShader/node/colorEncode.glsl',
+                'depthVert',
+                'depthFrag',
+            ];
+
+            var promises = [];
+            var shadersLib = {};
+            shaders.forEach( function ( shader ) {
+                var promise = Q( $.get( shader + '.glsl?' + Math.random() ) );
+                promise.then( function ( shaderText ) {
+                    if ( shader && shaderText ) {
+                        shadersLib[ shader ] = shaderText;
+                    }
+                } );
+                promises.push( promise );
+            } );
+
+            var _self = this;
+            Q.all( promises ).then( function () {
+                _self._shaderProcessor.addShaders( shadersLib );
+                defer.resolve();
+            } );
+
+            return defer.promise;
+        },
+
+        getShaderProgram: function ( vs, ps, defines, useCache ) {
+
+            var hash;
+            if ( useCache ) {
+                hash = vs + ps + defines.join( '' );
+                if ( !this._cache )
+                    this._cache = {};
+
+                if ( this._cache[ hash ] )
+                    return this._cache[ hash ];
+            }
+            var vertexshader = this._shaderProcessor.getShader( vs, defines );
+            var fragmentshader = this._shaderProcessor.getShader( ps, defines );
+
+            var program = new osg.Program(
+                new osg.Shader( 'VERTEX_SHADER', vertexshader ), new osg.Shader( 'FRAGMENT_SHADER', fragmentshader ) );
+
+            if ( useCache ) {
+                this._cache[ hash ] = program;
+            }
+
+            return program;
+        },
         /*
          * standard run scene, but for float tex support and shader loading
          */
@@ -1278,16 +1353,155 @@
 
             var scene = this.createScene();
 
+
+            var st, program;
+
+
+            var rttSize = [ this._canvas.width, this._canvas.height ];
+            var root = new osg.MatrixTransform();
+
+            //////////////////////////////////////////
+            //////////////////////////////////////////
+            // create the camera that render the scene
+            var camera = new osg.Camera();
+            camera.setName( 'scene' );
+            //osg.Matrix.makeOrtho( -rttSize[ 0 ] / 2, rttSize[ 0 ] / 2, -rttSize[ 1 ] / 2, rttSize[ 1 ] / 2, -1, 1, camera.getProjectionMatrix() );
+            camera.setProjectionMatrix( osg.Matrix.makePerspective( 60, rttSize[ 0 ] / rttSize[ 1 ], 1.0, 300.0, [] ) );
+            camera.setViewMatrix( osg.Matrix.makeLookAt( [ 0, -10, 0 ], [ 0, 0, 0 ], [ 0, 0, 1 ], [] ) );
+            camera.setRenderOrder( osg.Camera.PRE_RENDER, 0 );
+            camera.setReferenceFrame( osg.Transform.ABSOLUTE_RF );
+            camera.setViewport( new osg.Viewport( 0, 0, rttSize[ 0 ], rttSize[ 1 ] ) );
+            camera.setClearColor( [ 0.5, 0.5, 0.5, 1 ] );
+
+            // attach a texture to the camera to render the scene on
+            var sceneTexture = new osg.Texture();
+            sceneTexture.setTextureSize( rttSize[ 0 ], rttSize[ 1 ] );
+            sceneTexture.setMinFilter( 'LINEAR' );
+            sceneTexture.setMagFilter( 'LINEAR' );
+            camera.attachTexture( osg.FrameBufferObject.COLOR_ATTACHMENT0, sceneTexture, 0 );
+            camera.attachRenderBuffer( osg.FrameBufferObject.DEPTH_ATTACHMENT, osg.FrameBufferObject.DEPTH_COMPONENT16 );
+            // add the scene to the camera
+            camera.addChild( scene );
+            this.camera = camera;
+            // ADD
+            root.addChild( camera );
+
+
+            //////////////////////////////////////////
+            //////////////////////////////////////////
+            // create the camera that render the shadow into Accum BUFFER
+            var cameraShadowAccum = new osg.Camera();
+            cameraShadowAccum.setName( 'ShadowAccum' );
+            //osg.Matrix.makeOrtho( -rttSize[ 0 ] / 2, rttSize[ 0 ] / 2, -rttSize[ 1 ] / 2, rttSize[ 1 ] / 2, -1, 1, camera.getProjectionMatrix() );
+            cameraShadowAccum.setProjectionMatrix( osg.Matrix.makePerspective( 60, rttSize[ 0 ] / rttSize[ 1 ], 1.0, 300.0, [] ) );
+            cameraShadowAccum.setViewMatrix( osg.Matrix.makeLookAt( [ 0, -10, 0 ], [ 0, 0, 0 ], [ 0, 0, 1 ], [] ) );
+            cameraShadowAccum.setRenderOrder( osg.Camera.PRE_RENDER, 0 );
+            cameraShadowAccum.setReferenceFrame( osg.Transform.ABSOLUTE_RF );
+            cameraShadowAccum.setViewport( new osg.Viewport( 0, 0, rttSize[ 0 ], rttSize[ 1 ] ) );
+            cameraShadowAccum.setClearColor( [ 0.5, 0.5, 0.5, 1 ] );
+
+            // attach a texture to the camera to render the scene on
+            var ShadowAccumTexture = new osg.Texture();
+            ShadowAccumTexture.setTextureSize( rttSize[ 0 ], rttSize[ 1 ] );
+            ShadowAccumTexture.setMinFilter( 'LINEAR' );
+            ShadowAccumTexture.setMagFilter( 'LINEAR' );
+            cameraShadowAccum.attachTexture( osg.FrameBufferObject.COLOR_ATTACHMENT0, ShadowAccumTexture, 0 );
+            cameraShadowAccum.attachRenderBuffer( osg.FrameBufferObject.DEPTH_ATTACHMENT, osg.FrameBufferObject.DEPTH_COMPONENT16 );
+            // add the scene to the camera
+            cameraShadowAccum.addChild( scene );
+            this.cameraShadowAccum = cameraShadowAccum;
+
+            // Shadow Accum Specific Shader
+            st = this.cameraShadowAccum.getOrCreateStateSet();
+            this._shadowTechnique.forEach( function ( shadowMapCurr ) {
+                // add uniforms, textures and so on
+                shadowMapCurr.setReceiverStateSet( st );
+            } );
+            program = this.getShaderProgram( 'depthVert', 'depthFrag', [], false );
+            st.setAttributeAndModes( program );
+
+
+            // ADD
+            root.addChild( cameraShadowAccum );
+
+            //////////////////////////////////////////
+            //////////////////////////////////////////
+            // create the cameraDepth that render the scene into a depth buff
+            var cameraDepth = new osg.Camera();
+            cameraDepth.setName( 'DepthScene' );
+            //osg.Matrix.makeOrtho( -rttSize[ 0 ] / 2, rttSize[ 0 ] / 2, -rttSize[ 1 ] / 2, rttSize[ 1 ] / 2, -1, 1, camera.getProjectionMatrix() );
+            cameraDepth.setProjectionMatrix( osg.Matrix.makePerspective( 60, rttSize[ 0 ] / rttSize[ 1 ], 1.0, 300.0, [] ) );
+            cameraDepth.setViewMatrix( osg.Matrix.makeLookAt( [ 0, -10, 0 ], [ 0, 0, 0 ], [ 0, 0, 1 ], [] ) );
+            cameraDepth.setRenderOrder( osg.Camera.PRE_RENDER, 0 );
+            cameraDepth.setReferenceFrame( osg.Transform.ABSOLUTE_RF );
+            cameraDepth.setViewport( new osg.Viewport( 0, 0, rttSize[ 0 ], rttSize[ 1 ] ) );
+            cameraDepth.setClearColor( [ 0.5, 0.5, 0.5, 1 ] );
+
+            // attach a texture to the cameraDepth to render the scene on
+            var sceneTextureDepth = new osg.Texture();
+            sceneTextureDepth.setTextureSize( rttSize[ 0 ], rttSize[ 1 ] );
+            sceneTextureDepth.setMinFilter( 'LINEAR' );
+            sceneTextureDepth.setMagFilter( 'LINEAR' );
+            cameraDepth.attachTexture( osg.FrameBufferObject.COLOR_ATTACHMENT0, sceneTextureDepth, 0 );
+            cameraDepth.attachRenderBuffer( osg.FrameBufferObject.DEPTH_ATTACHMENT, osg.FrameBufferObject.DEPTH_COMPONENT16 );
+            // add the scene to the cameraDepth
+            cameraDepth.addChild( sceneTextureDepth );
+            this.cameraDepth = cameraDepth;
+
+
+            // Depth Specific Shader
+            st = this.cameraDepth.getOrCreateStateSet();
+            program = this.getShaderProgram( 'depthVert', 'depthFrag', [], false );
+            st.setAttributeAndModes( program );
+
+            // ADD
+            root.addChild( cameraDepth );
+
+
+            //////////////////////////////////
+            // BLEND BLUR MIX
+            this.composer = new osgUtil.Composer();
+
+            var inputTex = new osgUtil.Composer.Filter.InputTexture( sceneTexture );
+            this.composer.addPass( inputTex );
+            var krnSize = this._config[ 'blurKernelSize' ];
+
+
+            var optionsBilateral = {
+                nbSamples: krnSize,
+                depthTexture: sceneTextureDepth,
+                radius: 0.1
+            };
+            this.hBlur = new osgUtil.Composer.Filter.BilateralHBlur( optionsBilateral );
+            this.vBlur = new osgUtil.Composer.Filter.BilateralVBlur( optionsBilateral );
+
+            this.composer.addPass( this.hBlur, rttSize[ 0 ], rttSize[ 1 ] );
+            this.composer.addPass( this.vBlur, rttSize[ 0 ], rttSize[ 1 ] );
+            this.composer.renderToScreen( rttSize[ 0 ], rttSize[ 1 ] );
+            //this.composer.build();
+            /// ADD
+            root.addChild( this.composer );
+
+            //
+            viewer.setSceneData( root );
+            //
+
+            viewer.setupManipulator();
+
+            var manipulator = viewer.getManipulator();
+            manipulator.setNode( scene );
+            manipulator.setCamera( camera );
+            manipulator.computeHomePosition();
+
+            viewer.getCamera().setClearColor( [ 0.0, 0.0, 0.0, 0.0 ] );
+
             var wantToSeeAShadowSceneGraph = false;
             if ( wantToSeeAShadowSceneGraph ) {
                 var visitor = new osgUtil.DisplayNodeGraphVisitor();
-                scene.accept( visitor );
+                //scene.accept( visitor );
+                root.accept( visitor );
                 visitor.createGraph();
             }
-            viewer.setSceneData( scene );
-            viewer.setupManipulator();
-            viewer.getManipulator().computeHomePosition();
-            viewer.getCamera().setClearColor( [ 0.0, 0.0, 0.0, 0.0 ] );
 
             viewer.run();
 
@@ -1298,7 +1512,10 @@
     window.addEventListener( 'load', function () {
         var example = new Example();
         var canvas = document.getElementById( 'View' );
-        example.run( canvas );
+
+        example.readShaders().then( function () {
+            example.run( canvas );
+        } );
     }, true );
 
 } )();
