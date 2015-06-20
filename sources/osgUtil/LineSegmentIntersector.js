@@ -47,7 +47,7 @@ define( [
                 if ( !bsphere.valid() ) return false;
                 Vec3.sub( this._iStart, bsphere.center(), sm );
                 var c = Vec3.length2( sm ) - bsphere.radius2();
-                if ( c < 0.0 ) {
+                if ( c <= 0.0 ) {
                     return true;
                 }
                 // solve quadratic equation
@@ -70,7 +70,7 @@ define( [
                     return false;
                 }
 
-                if ( r1 >= 1.0 && r2 >= 1.0 ) {
+                if ( r1 > 1.0 && r2 > 1.0 ) {
                     return false;
                 }
                 return true;
