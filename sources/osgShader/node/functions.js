@@ -23,30 +23,15 @@ define( [
     } );
 
 
-    var NormalizeNormalAndEyeVector = function () {
+    var Normalize = function () {
         NodeFunctions.apply( this );
     };
-
-    NormalizeNormalAndEyeVector.prototype = MACROUTILS.objectInherit( NodeFunctions.prototype, {
-
-        type: 'NormalizeNormalAndEyeVector',
-
-        validInputs: [
-            'normal',
-            'position'
-        ],
-        validOuputs: [
-            'normal',
-            'eyeVector'
-        ],
-
+    Normalize.prototype = MACROUTILS.objectInherit( NodeFunctions.prototype, {
+        type: 'Normalize',
+        validInputs: [ 'vec' ],
+        validOuputs: [ 'vec' ],
         computeShader: function () {
-            return utils.callFunction( 'normalizeNormalAndEyeVector', undefined, [
-                this._inputs.normal,
-                this._inputs.position,
-                this._outputs.normal,
-                this._outputs.eyeVector
-            ] );
+            return utils.callFunction( 'normalize', this._outputs.vec, [ this._inputs.vec ] );
         }
     } );
 
@@ -116,7 +101,7 @@ define( [
         type: 'EncodeRGBM',
         validInputs: [ 'color', 'range' ],
         validOutputs: [ 'color' ],
-        computeFragment: function () {
+        computeShader: function () {
             return utils.callFunction( 'encodeRGBM', this._outputs.color, [ getVec3( this._inputs.color ), this._inputs.range ] );
         }
     } );
@@ -128,14 +113,14 @@ define( [
         type: 'DecodeRGBM',
         validInputs: [ 'color', 'range' ],
         validOutputs: [ 'color' ],
-        computeFragment: function () {
+        computeShader: function () {
             return utils.callFunction( 'decodeRGBM', this._outputs.color, [ this._inputs.color, this._inputs.range ] );
         }
     } );
 
     return {
         NodeFunctions: NodeFunctions,
-        NormalizeNormalAndEyeVector: NormalizeNormalAndEyeVector,
+        Normalize: Normalize,
         sRGBToLinear: sRGBToLinear,
         LinearTosRGB: LinearTosRGB,
         FrontNormal: FrontNormal,

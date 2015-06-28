@@ -56,7 +56,7 @@ define( [
     };
 
     /** @lends CullVisitor.prototype */
-    CullVisitor.prototype = MACROUTILS.objectInherit( CullStack.prototype, MACROUTILS.objectInherit( CullSettings.prototype, MACROUTILS.objectInherit( NodeVisitor.prototype, {
+    CullVisitor.prototype = MACROUTILS.objectInherit( CullStack.prototype, MACROUTILS.objectInherit( NodeVisitor.prototype, {
         distance: function ( coord, matrix ) {
             return -( coord[ 0 ] * matrix[ 2 ] + coord[ 1 ] * matrix[ 6 ] + coord[ 2 ] * matrix[ 10 ] + matrix[ 14 ] );
         },
@@ -78,12 +78,11 @@ define( [
             }
             this.traverse( node );
         },
-        setCamera: function ( camera ) {
-            this._camera = camera;
-        },
+
         getCurrentCamera: function () {
-            return this._camera;
+            return this._currentRenderBin.getStage().getCamera();
         },
+
         updateCalculatedNearFar: function ( matrix, drawable ) {
 
             var bb = drawable.getBoundingBox();
@@ -226,7 +225,7 @@ define( [
         }
 
 
-    } ) ) );
+    } ) );
 
 
 
@@ -339,14 +338,6 @@ define( [
             this.popViewport();
         }
 
-
-        // store complete frustum
-        // if we computed near far
-        // for any other usage
-        // (ie: shadow frustums intersection)
-        if ( camera.getComputeNearFar() ) {
-            camera.setNearFar( this._computedNear, this._computedFar );
-        }
         // restore previous state of the camera
         this.setCullSettings( previousCullsettings );
         this._computedNear = previousZnear;
