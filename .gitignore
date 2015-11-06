@@ -31,3 +31,4 @@ examples/vendors/es6-shim.js
 examples/vendors/hammer.js
 sources/version.js
 examples/media/*
+.idea
