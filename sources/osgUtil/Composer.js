@@ -120,7 +120,7 @@ Composer.prototype = MACROUTILS.objectInherit( Node.prototype, {
         return false;
     },
 
-    /* develblock:start */
+    /*develblock:start*/
     // debug only check for specific bad condition:
     // in webgl 1.0 you cannot read and write on the same texture
     // so you shouldn't bind a FOB texture as input and output
@@ -132,7 +132,7 @@ Composer.prototype = MACROUTILS.objectInherit( Node.prototype, {
 
         }
     },
-    /* develblock:end */
+    /*develblock:end*/
 
     build: function () {
 
@@ -247,9 +247,9 @@ Composer.prototype = MACROUTILS.objectInherit( Node.prototype, {
             // if rendering into texture framebuffer
             if ( textureResult ) {
 
-                /* develblock:start */
+                /*develblock:start*/
                 self.debugCheckRttNotReadWrite( textureResult, stateSet );
-                /* develblock:end */
+                /*develblock:end*/
 
                 // assign the result texture to the next stateset
                 if ( i + 1 < array.length ) {
@@ -521,15 +521,32 @@ Composer.Filter.PingPong.prototype = MACROUTILS.objectInherit( Composer.Filter.C
         st0.setAttributeAndModes( this._program );
         st1.setAttributeAndModes( this._program );
 
-        var uniforms = this._uniforms;
+        // PingPong filter is a peculiar Filter where user provides the Camera
+        // instead of compose::build creating them, and allowing user to provide
+        // them in the ctor
+        // To make sure we don't forget any uniform
+        // we make sure to get uniform from the filter itself and the uniform
+        // from the parameters
+        var k, l, keys, unif, uniforms = this.getStateSet().getUniformList();
         if ( uniforms ) {
-            var keys = window.Object.keys( uniforms );
-            for ( var k = 0, l = keys.length; k < l; k++ ) {
-                var unif = uniforms[ keys[ k ] ];
+            keys = window.Object.keys( uniforms );
+            for ( k = 0, l = keys.length; k < l; k++ ) {
+                unif = uniforms[ keys[ k ] ];
                 st0.addUniform( unif );
                 st1.addUniform( unif );
             }
         }
+
+        uniforms = this._uniforms;
+        if ( uniforms ) {
+            keys = window.Object.keys( uniforms );
+            for ( k = 0, l = keys.length; k < l; k++ ) {
+                unif = uniforms[ keys[ k ] ];
+                st0.addUniform( unif );
+                st1.addUniform( unif );
+            }
+        }
+
 
         var uniformTU0 = Uniform.createInt1( 0, 'Texture0' );
         var uniformTU1 = Uniform.createInt1( 1, 'Texture1' );

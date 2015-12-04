@@ -48,7 +48,10 @@ var CullVisitor = function () {
     /*jshint bitwise: true */
 
     this._reserveLeafStack = [ new RenderLeaf() ];
-    this._reserveLeafStack.current = 0;
+    this._reserveLeafStackCurrent = 0;
+
+    this._reserveCullSettingsStack = [ new CullSettings() ];
+    this._reserveCullSettingsStackCurrent = 0;
 
     this._renderBinStack = [];
     this.visitorType = NodeVisitor.CULL_VISITOR;
@@ -56,6 +59,7 @@ var CullVisitor = function () {
     this._identityMatrix = Matrix.create();
 
     this._renderer = undefined;
+    this._renderStageType = RenderStage;
 };
 
 /** @lends CullVisitor.prototype */
@@ -83,37 +87,43 @@ CullVisitor.prototype = MACROUTILS.objectInherit( CullStack.prototype, MACROUTIL
         return this._currentRenderBin.getStage().getCamera();
     },
 
-    updateCalculatedNearFar: function ( matrix, drawable ) {
+    updateCalculatedNearFar: ( function () {
+        var nearVec = Vec3.create();
+        var farVec = Vec3.create();
 
-        var bb = drawable.getBoundingBox();
-        var dNear, dFar;
+        return function ( matrix, drawable ) {
 
-        // efficient computation of near and far, only taking into account the nearest and furthest
-        // corners of the bounding box.
-        dNear = this.distance( bb.corner( this._bbCornerNear ), matrix );
-        dFar = this.distance( bb.corner( this._bbCornerFar ), matrix );
+            var bb = drawable.getBoundingBox();
+            var dNear, dFar;
 
-        if ( dNear > dFar ) {
-            var tmp = dNear;
-            dNear = dFar;
-            dFar = tmp;
-        }
+            // efficient computation of near and far, only taking into account the nearest and furthest
+            // corners of the bounding box.
+            dNear = this.distance( bb.corner( this._bbCornerNear, nearVec ), matrix );
+            dFar = this.distance( bb.corner( this._bbCornerFar, farVec ), matrix );
 
-        if ( dFar < 0.0 ) {
-            // whole object behind the eye point so discard
-            return false;
-        }
+            if ( dNear > dFar ) {
+                var tmp = dNear;
+                dNear = dFar;
+                dFar = tmp;
+            }
 
-        if ( dNear < this._computedNear ) {
-            this._computedNear = dNear;
-        }
+            if ( dFar < 0.0 ) {
+                // whole object behind the eye point so discard
+                return false;
+            }
 
-        if ( dFar > this._computedFar ) {
-            this._computedFar = dFar;
-        }
+            if ( dNear < this._computedNear ) {
+                this._computedNear = dNear;
+            }
 
-        return true;
-    },
+            if ( dFar > this._computedFar ) {
+                this._computedFar = dFar;
+            }
+
+            return true;
+
+        };
+    } )(),
 
 
     setStateGraph: function ( sg ) {
@@ -137,7 +147,10 @@ CullVisitor.prototype = MACROUTILS.objectInherit( CullStack.prototype, MACROUTIL
         // Reseting elements and refilling them later is faster than create new elements
         // That's the reason to have a leafStack, see http://jsperf.com/refill/2
         this.resetRenderLeafStack();
-        this._reserveLeafStack.current = 0;
+        this._reserveLeafStackCurrent = 0;
+
+        this.resetCullSettingsStack();
+        this._reserveCullSettingsStackCurrent = 0;
 
         this._computedNear = Number.POSITIVE_INFINITY;
         this._computedFar = Number.NEGATIVE_INFINITY;
@@ -196,7 +209,7 @@ CullVisitor.prototype = MACROUTILS.objectInherit( CullStack.prototype, MACROUTIL
         CullStack.prototype.popProjectionMatrix.call( this );
     },
 
-    popCameraModelViewProjectionMatrix: function ( /*camera*/) {
+    popCameraModelViewProjectionMatrix: function () {
         this.popModelViewMatrix();
         this.popProjectionMatrix();
     },
@@ -211,16 +224,33 @@ CullVisitor.prototype = MACROUTILS.objectInherit( CullStack.prototype, MACROUTIL
     },
 
     createOrReuseRenderLeaf: function () {
-        var l = this._reserveLeafStack[ this._reserveLeafStack.current++ ];
-        if ( this._reserveLeafStack.current === this._reserveLeafStack.length ) {
+        var l = this._reserveLeafStack[ this._reserveLeafStackCurrent++ ];
+        if ( this._reserveLeafStackCurrent === this._reserveLeafStack.length ) {
             this._reserveLeafStack.push( new RenderLeaf() );
         }
         return l;
     },
 
     resetRenderLeafStack: function () {
-        for ( var i = 0, j = this._reserveLeafStack.current; i <= j; i++ ) {
+        for ( var i = 0, j = this._reserveLeafStackCurrent; i <= j; i++ ) {
             this._reserveLeafStack[ i ].reset();
+        }
+    },
+
+    createOrReuseCullSettings: function () {
+        var l = this._reserveCullSettingsStack[ this._reserveCullSettingsStackCurrent++ ];
+
+        if ( this._reserveCullSettingsStackCurrent === this._reserveCullSettingsStack.length ) {
+
+            this._reserveCullSettingsStack.push( new CullSettings() );
+
+        }
+        return l;
+    },
+
+    resetCullSettingsStack: function () {
+        for ( var i = 0, j = this._reserveCullSettingsStackCurrent; i <= j; i++ ) {
+            this._reserveCullSettingsStack[ i ].reset();
         }
     }
 
@@ -264,7 +294,7 @@ CullVisitor.prototype[ Camera.typeID ] = function ( camera ) {
     // save cullSettings
     // TODO Perf: why it's not a stack
     // and is pollutin  GC ?
-    var previousCullsettings = new CullSettings();
+    var previousCullsettings = this.createOrReuseCullSettings();
     previousCullsettings.setCullSettings( this );
 
     this._computedNear = Number.POSITIVE_INFINITY;
@@ -301,7 +331,7 @@ CullVisitor.prototype[ Camera.typeID ] = function ( camera ) {
         var previousStage = renderBin.getStage();
 
         // use render to texture stage
-        var rtts = new RenderStage();
+        var rtts = this._rootRenderStage ? this._rootRenderStage.cloneType() : new RenderStage();
         rtts.setCamera( camera );
         rtts.setClearDepth( camera.getClearDepth() );
         rtts.setClearColor( camera.getClearColor() );
@@ -504,7 +534,7 @@ var prePopGeometry = function ( cull, node ) {
 
 CullVisitor.prototype[ Geometry.typeID ] = ( function () {
     var tempVec = Vec3.create();
-
+    var loggedOnce = false;
     return function ( node ) {
 
         var modelview = this.getCurrentModelViewMatrix();
@@ -538,7 +568,12 @@ CullVisitor.prototype[ Geometry.typeID ] = ( function () {
             depth = this.distance( bb.center( tempVec ), modelview );
         }
         if ( osgMath.isNaN( depth ) ) {
-            Notify.warn( 'warning geometry has a NaN depth, ' + modelview + ' center ' + tempVec );
+
+            if ( !loggedOnce ) {
+                Notify.warn( 'warning geometry has a NaN depth, ' + modelview + ' center ' + tempVec );
+                loggedOnce = true;
+            }
+
         } else {
 
             leaf.init( this._currentStateGraph,

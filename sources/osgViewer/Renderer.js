@@ -21,6 +21,8 @@ var Renderer = function ( camera ) {
 
     this._frameStamp = undefined;
 
+    this._previousCullsettings = new CullSettings();
+
     this.setDefaults();
 };
 
@@ -34,14 +36,13 @@ Renderer.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Ob
 
         this._cullVisitor = new CullVisitor();
         this._cullVisitor.setRenderer( this );
-        this._renderStage = new RenderStage();
         this._stateGraph = new StateGraph();
 
         this.getCamera().setClearColor( Vec4.create() );
-
+        this.setRenderStage( new RenderStage() );
 
         var osg = require( 'osg/osg' );
-        var stateSet = this.getCamera().getOrCreateStateSet(); //new osg.StateSet();
+        var stateSet = this.getCamera().getOrCreateStateSet();
         stateSet.setAttributeAndModes( new osg.Material() );
         stateSet.setAttributeAndModes( new osg.Depth() );
         stateSet.setAttributeAndModes( new osg.BlendFunc() );
@@ -56,6 +57,10 @@ Renderer.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Ob
     setCullVisitor: function ( cv ) {
         if ( cv && !cv.getRenderer() ) cv.setRenderer( this );
         this._cullVisitor = cv;
+    },
+
+    setRenderStage: function ( rs ) {
+        this._renderStage = rs;
     },
 
     getCamera: function () {
@@ -110,10 +115,10 @@ Renderer.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Ob
         this._cullVisitor.pushStateSet( camera.getStateSet() );
 
         // save cullSettings
-        var previousCullsettings = new CullSettings();
-        previousCullsettings.setCullSettings( this._cullVisitor );
+        this._previousCullsettings.reset();
+        this._previousCullsettings.setCullSettings( this._cullVisitor );
         this._cullVisitor.setCullSettings( camera );
-        if ( previousCullsettings.getSettingSourceOverrider() === this._cullVisitor && previousCullsettings.getEnableFrustumCulling() ) {
+        if ( this._previousCullsettings.getSettingSourceOverrider() === this._cullVisitor && this._previousCullsettings.getEnableFrustumCulling() ) {
             this._cullVisitor.setEnableFrustumCulling( true );
         }
 
@@ -168,7 +173,7 @@ Renderer.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Ob
 
 
         // restore previous state of the camera
-        this._cullVisitor.setCullSettings( previousCullsettings );
+        this._cullVisitor.setCullSettings( this._previousCullsettings );
 
         this._cullVisitor.popViewport();
         this._cullVisitor.popStateSet();

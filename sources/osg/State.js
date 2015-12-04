@@ -264,10 +264,13 @@ State.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Objec
         var mu = this.projectionMatrix;
 
         var mul = program._uniformsCache[ mu.name ];
-        Matrix.copy( matrix, mu.get() );
-        mu.dirty();
-        mu.apply( this.getGraphicContext(), mul );
+        if ( mul ) {
 
+            Matrix.copy( matrix, mu.get() );
+            mu.dirty();
+            mu.apply( this.getGraphicContext(), mul );
+
+        }
     },
 
     applyStateSet: function ( stateset ) {
@@ -463,9 +466,9 @@ State.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Objec
                 attribute = attributeStack.back().object;
             }
 
-            /* develblock:start */
+            /*develblock:start*/
             Notify.assert( key === attribute.getTypeMember(), 'State:applyAttributeMap attribute key ' + key + ' !== ' + attribute.getTypeMember() );
-            /* develblock:end */
+            /*develblock:end*/
 
 
             if ( attributeStack.lastApplied !== attribute ) {
@@ -1037,11 +1040,10 @@ State.prototype = MACROUTILS.objectLibraryClass( MACROUTILS.objectInherit( Objec
             var uniformStack = uniformMapStack[ name ];
             location = programUniformMap[ name ];
             var uniform;
-
             if ( uniformStack !== undefined ) {
-
                 if ( uniformStack.values().length === 0 ) {
                     uniform = uniformStack.globalDefault;
+                    Notify.warn( 'Uniform Default Not attached to a StateSet in Scene Hierarchy: ' + uniformStack.globalDefault.getName() );
                 } else {
                     uniform = uniformStack.back().object;
                 }

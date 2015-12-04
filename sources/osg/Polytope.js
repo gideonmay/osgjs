@@ -1,5 +1,4 @@
 'use strict';
-var Matrix = require( 'osg/Matrix' );
 var Object = require( 'osg/Object' );
 var Plane = require( 'osg/Plane' );
 var MACROUTILS = require( 'osg/Utils' );
@@ -31,14 +30,23 @@ Polytope.prototype = MACROUTILS.objectInherit( Object.prototype, {
     getPlanes: function () {
         return this._planeList;
     },
+
     setPlanes: function ( pl ) {
         this._planeList = pl;
         this.setupMask();
     },
 
     clear: function () {
-        this._planeList.length = 0;
+
+        this._clippingMask = 0x0;
+        if ( this._planeList ) {
+            for ( var i = 0, l = this._planeList.length; i < l; ++i ) {
+                Plane.init( this._planeList[ i ] );
+            }
+        }
+        this._vertexList = [];
         this.setupMask();
+
     },
 
     /** Create a Polytope which is a cube, centered at 0,0,0, with sides of 2 units.*/
@@ -134,8 +142,8 @@ Polytope.prototype = MACROUTILS.objectInherit( Object.prototype, {
 
     setupMask: function ( plength ) {
         this._resultMask = 0;
-        plength = ( plength !== undefined ) ? plength : this._planeList.length;
-        for ( var i = 0; i < plength; ++i ) {
+        var pMasklength = ( plength !== undefined ) ? plength : this._planeList.length;
+        for ( var i = 0; i < pMasklength; ++i ) {
             this._resultMask = ( this._resultMask << 1 ) | 1;
         }
         this._maskStack = [];
@@ -315,19 +323,6 @@ Polytope.prototype = MACROUTILS.objectInherit( Object.prototype, {
             selectorMask <<= 1;
         }
         return true;
-    },
-
-
-    /** Transform the clipping set by matrix.  Note, this operations carries out
-     * the calculation of the inverse of the matrix since a plane must
-     * be multiplied by the inverse transposed to transform it. This
-     * makes this operation expensive.  If the inverse has been already
-     * calculated elsewhere then use transformProvidingInverse() instead.
-     * See http://www.worldserver.com/turk/computergraphics/NormalTransformations.pdf*/
-    transform: function ( matrix ) {
-        var inverse = new Matrix();
-        inverse.invert( matrix );
-        this.transformProvidingInverse( inverse );
     },
 
     /** Transform the clipping set by provide a pre inverted matrix.

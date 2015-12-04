@@ -95,6 +95,8 @@ var createFakeRenderer = function () {
         drawElements: function () {},
         createBuffer: function () {},
         deleteBuffer: function () {},
+
+
         blendColor: function () {},
         enable: function () {},
         disable: function () {},
@@ -119,26 +121,51 @@ var createFakeRenderer = function () {
         enableVertexAttribArray: function () {},
         vertexAttribPointer: function () {},
         createTexture: function () {},
+        createFramebuffer: function () {
+            return 1;
+        },
+        deleteFramebuffer: function () {},
         bindFramebuffer: function () {},
+        framebufferTexture2D: function () {},
+        checkFramebufferStatus: function () {
+            return 0x8CD5;
+        },
+        createRenderbuffer: function () {
+            return 1;
+        },
+        deleteRenderbuffer: function () {},
+        bindRenderbuffer: function () {},
+        renderbufferStorage: function () {},
+        framebufferRenderbuffer: function () {},
         clear: function () {},
         viewport: function () {},
         cullFace: function () {},
         texImage2D: function () {},
         texParameteri: function () {},
-        createShader: function () {},
+        createShader: function () {
+            return 1;
+        },
+        deleteShader: function () {},
         shaderSource: function () {},
         compileShader: function () {},
         getShaderParameter: function () {
             return true;
         },
-        isContextLost: function () {},
+        isContextLost: function () {
+            return false;
+        },
         getShaderInfoLog: function () {},
-        createProgram: function () {},
+        createProgram: function () {
+            return {};
+        },
+        deleteProgram: function () {},
         attachShader: function () {},
         validateProgram: function () {},
         linkProgram: function () {},
         getParameter: function () {},
-        getProgramParameter: function () {},
+        getProgramParameter: function () {
+            return true;
+        },
         getProgramInfoLog: function () {},
         getUniformLocation: function () {
             return 0;
@@ -302,10 +329,10 @@ var createAnimationUpdateCallback = function ( animations ) {
     return cbMap;
 };
 
-var createCanvas = function () {
+var createCanvas = function ( noGL ) {
 
-    // mockup for phantomjs
-    if ( navigator.userAgent.indexOf( 'PhantomJS' ) !== -1 ) {
+    // mockup for phantomjs or benchmarks
+    if ( noGL || navigator.userAgent.indexOf( 'PhantomJS' ) !== -1 ) {
         return createFakeWebGLCanvas();
     }
 

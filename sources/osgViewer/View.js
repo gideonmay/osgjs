@@ -15,7 +15,8 @@ var IntersectionVisitor = require( 'osgUtil/IntersectionVisitor' );
 var LineSegmentIntersector = require( 'osgUtil/LineSegmentIntersector' );
 var Renderer = require( 'osgViewer/Renderer' );
 var Scene = require( 'osgViewer/Scene' );
-
+var DisplayGraph = require( 'osgUtil/DisplayGraph' );
+var Notify = require( 'osg/Notify' );
 
 
 // View is normally inherited from osg/View. In osgjs we dont need it yet
@@ -81,6 +82,14 @@ View.prototype = {
 
     },
 
+    // check Each frame because HTML standard inconsistencies
+    // - mobile full-screen, device orientation, etc
+    // peculiarity of webgl canvas resizing here some details
+    // http://webglfundamentals.org/webgl/lessons/webgl-resizing-the-canvas.html
+    // screen size
+    // http://tripleodeon.com/2011/12/first-understand-your-screen/
+    // touchy is touchy: many things to know
+    // http://webglfundamentals.org/webgl/lessons/webgl-anti-patterns.html
     computeCanvasSize: ( function () {
         return function ( canvas ) {
 
@@ -144,6 +153,21 @@ View.prototype = {
         if ( options && options.enableFrustumCulling )
             this.getCamera().getRenderer().getCullVisitor().setEnableFrustumCulling( true );
 
+
+        // add a function to refresh the graph from the console
+        if ( options && options.debugGraph ) {
+
+            var camera = this.getCamera();
+            DisplayGraph.instance().refreshGraph = function () {
+                var displayGraph = DisplayGraph.instance();
+                displayGraph.setDisplayGraphRenderer( true );
+                displayGraph.createGraph( camera );
+            };
+
+            Notify.log( 'to refresh the graphs type in the console:\nOSG.osgUtil.DisplayGraph.instance().refreshGraph()' );
+
+        }
+
     },
 
     /**
@@ -151,18 +175,38 @@ View.prototype = {
      * Y = 0 at the BOTTOM
      */
     computeIntersections: function ( x, y, traversalMask ) {
+
         /*jshint bitwise: false */
         if ( traversalMask === undefined ) {
             traversalMask = ~0;
         }
         /*jshint bitwise: true */
-        var lsi = new LineSegmentIntersector();
-        lsi.set( Vec3.createAndSet( x, y, 0.0 ), Vec3.createAndSet( x, y, 1.0 ) );
-        var iv = new IntersectionVisitor();
-        iv.setTraversalMask( traversalMask );
-        iv.setIntersector( lsi );
-        this._camera.accept( iv );
-        return lsi.getIntersections();
+
+
+        if ( !this._lsi ) {
+            this._lsi = new LineSegmentIntersector();
+        } else {
+            this._lsi.reset();
+        }
+
+        if ( !this._origIntersect ) {
+            this._origIntersect = Vec3.create();
+            this._dstIntersect = Vec3.create();
+        }
+
+        this._lsi.set( Vec3.set( x, y, 0.0, this._origIntersect ), Vec3.set( x, y, 1.0, this._dstIntersect ) );
+
+
+        if ( !this._iv ) {
+            this._iv = new IntersectionVisitor();
+            this._iv.setIntersector( this._lsi );
+        } else {
+            this._iv.reset();
+        }
+        this._iv.setTraversalMask( traversalMask );
+        this._camera.accept( this._iv );
+
+        return this._lsi.getIntersections();
     },
 
     setFrameStamp: function ( frameStamp ) {
@@ -256,6 +300,7 @@ View.prototype = {
         availableTime = Program.flushDeletedGLPrograms( gl, availableTime );
         availableTime = Shader.flushDeletedGLShaders( gl, availableTime );
         availableTime = FrameBufferObject.flushDeletedGLFrameBuffers( gl, availableTime );
+        availableTime = FrameBufferObject.flushDeletedGLRenderBuffers( gl, availableTime );
     },
 
     flushAllDeletedGLObjects: function () {
@@ -266,6 +311,7 @@ View.prototype = {
         Program.flushAllDeletedGLPrograms( gl );
         Shader.flushAllDeletedGLShaders( gl );
         FrameBufferObject.flushAllDeletedGLFrameBuffers( gl );
+        FrameBufferObject.flushAllDeletedGLRenderBuffers( gl );
     }
 };
 

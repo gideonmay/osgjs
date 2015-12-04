@@ -28,6 +28,15 @@ var Float = {
     }
 };
 
+var TypeToSize = [];
+TypeToSize[ Channel.ChannelType.Float ] = 1;
+TypeToSize[ Channel.ChannelType.FloatCubicBezier ] = 1;
+TypeToSize[ Channel.ChannelType.Vec3 ] = 3;
+TypeToSize[ Channel.ChannelType.Vec3CubicBezier ] = 3;
+TypeToSize[ Channel.ChannelType.Quat ] = 4;
+TypeToSize[ Channel.ChannelType.QuatSlerp ] = 4;
+TypeToSize[ Channel.ChannelType.Matrix ] = 16;
+
 
 var ResultType = [];
 ResultType.length = Channel.ChannelType.Count;
@@ -515,24 +524,38 @@ BasicAnimationManager.prototype = MACROUTILS.objectInherit( BaseObject.prototype
 
             var target = targetList[ i ];
             var affectedChannels = target.channels;
-            if ( affectedChannels.length === 0 ) { // no blending ?
+            var nbChannels = affectedChannels.length;
+            // note operatorType operations doesn't always operate on arrays (float)
+            // so we can't simply assume that target.value is an array so we need
+            // to write "target.value = ..."
+
+            if ( nbChannels === 0 ) { // no blending ?
                 target.value = operatorType.copy( target.defaultValue, target.value );
-                continue;
-            }
 
-            target.value = operatorType.init( target.value );
-            var accumulatedWeight = 0.0;
+            } else if ( nbChannels === 1 ) {
+                target.value = operatorType.copy( affectedChannels[ 0 ].value, target.value );
 
-            for ( var j = 0, nj = affectedChannels.length; j < nj; j++ ) {
+            } else {
 
-                var achannel = affectedChannels[ j ];
-                var weight = achannel.weight;
-                accumulatedWeight += weight;
-                var ratio = weight / accumulatedWeight;
-                target.value = operatorType.lerp( ratio, target.value, achannel.value, target.value );
+                // blend between multiple channels
+                target.value = operatorType.init( target.value );
+                var accumulatedWeight = 0.0;
+
+                // it's the same as targetOut = (v0 * w0 + v1 * w1 + ...) / (w0 + w1 + ...)
+                for ( var j = 0, nj = affectedChannels.length; j < nj; j++ ) {
+
+                    var achannel = affectedChannels[ j ];
+                    var weight = achannel.weight;
+                    accumulatedWeight += weight;
+                    // avoid divide by zero and useless lerp
+                    if ( accumulatedWeight === 0.0 || weight === 0.0 )
+                        continue;
+
+                    var ratio = weight / accumulatedWeight;
+                    target.value = operatorType.lerp( ratio, target.value, achannel.value, target.value );
+                }
             }
         }
-
     },
 
     _updateChannelsType: function ( t, channels, interpolator ) {
@@ -615,9 +638,55 @@ BasicAnimationManager.prototype = MACROUTILS.objectInherit( BaseObject.prototype
             this._targetsByTypes[ i ].length = 0;
         }
 
+    },
+
+    setAnimationLerpEndStart: function ( anim, lerpDuration ) {
+        var channels = anim.channels;
+        if ( anim.originalDuration === undefined )
+            anim.originalDuration = anim.duration;
+
+        anim.duration = anim.originalDuration + lerpDuration;
+
+        for ( var i = 0, nbChannels = channels.length; i < nbChannels; ++i ) {
+            var ch = channels[ i ].channel;
+
+            // update channel end time
+            if ( ch.originalEnd === undefined )
+                ch.originalEnd = ch.end;
+
+            if ( ch.originalEnd !== anim.originalDuration )
+                continue;
+
+            ch.end = ch.originalEnd + lerpDuration;
+
+            // add or remove additonal key and time
+
+            var sizeElt = TypeToSize[ ch.type ];
+            var size = ch.times.buffer.byteLength / 4;
+
+            // no lerp between end and start
+            if ( lerpDuration === 0.0 ) {
+
+                ch.keys = new Float32Array( ch.keys.buffer, 0, ( size - 1 ) * sizeElt );
+                ch.times = new Float32Array( ch.times.buffer, 0, size - 1 );
+
+            } else {
+
+                // take full size of buffer (with additional keys)
+                ch.keys = new Float32Array( ch.keys.buffer, 0, size * sizeElt );
+                // copy first key
+                var idLast = ( size - 1 ) * sizeElt;
+                for ( var j = 0; j < sizeElt; ++j )
+                    ch.keys[ idLast + j ] = ch.keys[ j ];
+
+                ch.times = new Float32Array( ch.times.buffer, 0, size );
+                ch.times[ size - 1 ] = ch.times[ size - 2 ] + lerpDuration;
+            }
+        }
     }
 
-
 } );
+
+BasicAnimationManager.TypeToSize = TypeToSize;
 
 module.exports = BasicAnimationManager;

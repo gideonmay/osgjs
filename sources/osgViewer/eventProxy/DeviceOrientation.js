@@ -6,15 +6,19 @@ var DeviceOrientation = function ( viewer ) {
     this._enable = false;
 
     // Landscape mobile orientation testing defaults
-    this._deviceOrientation = {
-        alpha: 90, // angle of rotation around Z axis
-        beta: 0, // angle of rotation around X axis
-        gamma: -90 // angle of rotation around Y axis
-    };
+    this._deviceOrientation = undefined;
     this._screenOrientation = window.orientation || 90;
 };
 
 DeviceOrientation.prototype = {
+
+    setEnable: function ( bool ) {
+        this._enable = bool;
+    },
+
+    getEnable: function () {
+        return this._enable;
+    },
 
     init: function () {
 
@@ -39,6 +43,9 @@ DeviceOrientation.prototype = {
 
     isValid: function () {
         if ( !this._enable )
+            return false;
+
+        if ( !this._deviceOrientation )
             return false;
 
         var manipulator = this._viewer.getManipulator();
